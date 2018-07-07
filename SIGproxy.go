@@ -29,6 +29,7 @@ var (
 	username     = ""
 	port         = 30303 // Port number of this proxy/machine
 	thisIP       = ""
+	application  string
 )
 
 // Info stores data for measurements
@@ -163,7 +164,7 @@ func handleRequest(conn net.Conn) {
 }
 
 func startApplication() {
-	cmd := exec.Command("sudo", "-s", "-u", username, "./clientTCP")
+	cmd := exec.Command("sudo", "-s", "-u", username, application)
 	if err := cmd.Start(); err != nil {
 		fmt.Println("Failed to start process", err)
 	} else {
@@ -377,6 +378,7 @@ func init() {
 
 	validSIGInfo = regexp.MustCompile(`^\d+-[\d:A-Fa-f]+,\[(\d+.){3}\d+\]:\d+@((\d+.){3}\d+\/\d+,?)*$`)
 	extractIP = regexp.MustCompile(`(SRC|DST)=(\d+.){3}\d+`)
+	application = "./clientTCP"
 }
 
 func main() {
