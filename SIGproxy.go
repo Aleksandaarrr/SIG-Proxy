@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"net"
@@ -123,11 +124,14 @@ func runSIGDiscoveryServer() {
 		panic(err)
 	}
 
-	// accept connection on port 10001
-	conn, err := sigListener.Accept()
+	for {
+		// accept connection on port 10001
+		conn, err := sigListener.Accept()
+		fmt.Println("Accepted connection from", conn.RemoteAddr().String())
 
-	if err == nil {
-		go handleRequest(conn)
+		if err == nil {
+			go handleRequest(conn)
+		}
 	}
 }
 
@@ -140,7 +144,10 @@ func handleRequest(conn net.Conn) {
 	// Read the incoming connection into the buffer.
 	n, err := conn.Read(buf)
 	if err != nil {
-		fmt.Println("Error reading:", err.Error())
+		if err != io.EOF {
+			fmt.Println("Error reading:", err)
+		}
+		return
 	}
 	if validSIGInfo.MatchString(string(buf[:n])) {
 		conn.Write([]byte(sigInfo))
@@ -150,7 +157,8 @@ func handleRequest(conn net.Conn) {
 			info.ping = math.MaxFloat64
 			info.ttl = math.MaxInt64
 			info.count = 0
-			measuringMap[conn.RemoteAddr().String()] = info
+			tmpSplit := strings.Split(conn.RemoteAddr().String(), ":")
+			measuringMap[tmpSplit[0]] = info
 			fmt.Println("Succesfully created sig.config.json")
 			if runningSIG != nil {
 				restartSIG()
@@ -193,7 +201,8 @@ func getSIGInfo(remoteIP string) {
 				info.ping = math.MaxFloat64
 				info.ttl = math.MaxInt64
 				info.count = 0
-				measuringMap[conn.RemoteAddr().String()] = info
+				tmpSplit := strings.Split(conn.RemoteAddr().String(), ":")
+				measuringMap[tmpSplit[0]] = info
 				fmt.Println("Succesfully created sig.config.json")
 				if runningSIG != nil {
 					restartSIG()
@@ -369,6 +378,12 @@ func unmarkPackets(remoteIP string) {
 	}
 }
 
+// TODO
+func initLinuxCmds() {
+	// - sudo sysctl -w net.ipv4.ip_forward=1
+	// - sudo sysctl -w net.ipv4.conf.all.rp_filter=0 net.ipv4.conf.default.rp_filter=0
+}
+
 func init() {
 	config = Config{}
 	config.ConfigVersion = 9001
@@ -382,6 +397,7 @@ func init() {
 }
 
 func main() {
+	initLinuxCmds()
 	deleteUser("test")
 	createNewUser("test")
 	getThisIP()
