@@ -19,18 +19,19 @@ import (
 )
 
 var (
-	sigListener  net.Listener
-	config       Config
-	measuringMap map[string]Info
-	validSIGInfo *regexp.Regexp
-	extractIP    *regexp.Regexp
-	runningSIG   *exec.Cmd
-	sigInfo      = "17-ffaa:1:1d,[127.0.0.1]:10080@10.0.2.0/24,192.168.178.0/24,10.0.8.0/24" // Info of this SIG
-	count        = 1
-	username     = ""
-	port         = 30303 // Port number of this proxy/machine
-	thisIP       = ""
-	application  string
+	sigListener      net.Listener
+	config           Config
+	measuringMap     map[string]Info
+	validSIGInfo     *regexp.Regexp
+	extractIP        *regexp.Regexp
+	runningSIG       *exec.Cmd
+	sigInfo          = "17-ffaa:1:1d,[127.0.0.1]:10080@10.0.2.0/24,192.168.178.0/24,10.0.8.0/24" // Info of this SIG
+	count            = 1
+	username         = ""
+	port             = 30303   // Port number of the application (listening port)
+	sigDiscoveryPort = "10001" // Specify own SIG discovery port
+	thisIP           = ""
+	application      string
 )
 
 // Info stores data for measurements
@@ -119,7 +120,7 @@ func runSIGDiscoveryServer() {
 	fmt.Println("Launching server...")
 
 	// listen on all interfaces
-	sigListener, err := net.Listen("tcp", "0.0.0.0:10001")
+	sigListener, err := net.Listen("tcp", "0.0.0.0:"+sigDiscoveryPort)
 	if err != nil {
 		panic(err)
 	}
@@ -182,7 +183,7 @@ func startApplication() {
 
 func getSIGInfo(remoteIP string) {
 	// connect to this socket
-	conn, err := net.Dial("tcp", remoteIP)
+	conn, err := net.Dial("tcp", remoteIP+":"+sigDiscoveryPort)
 	if err == nil {
 		defer conn.Close()
 		buf := make([]byte, 1024)
@@ -380,6 +381,31 @@ func unmarkPackets(remoteIP string) {
 
 // TODO
 func initLinuxCmds() {
+	cmd := exec.Command("bash", "-c", "sudo setcap cap_net_admin+eip /home/ubuntu/go/src/github.com/scionproto/scion/bin/sig")
+	err := cmd.Run()
+	if err != nil {
+		fmt.Println("Failed to enable CAP_NET_ADMIN", err)
+	} else {
+		fmt.Println("Enabled CAP_NET_ADMIN")
+	}
+
+	cmd = exec.Command("bash", "-c", "sudo sysctl -w net.ipv4.ip_forward=1")
+	err = cmd.Run()
+	if err != nil {
+		fmt.Println("Failed enable IP forwarding", err)
+	} else {
+		fmt.Println("Enabled IP forwarding")
+	}
+
+	cmd = exec.Command("bash", "-c", "sudo sysctl -w net.ipv4.conf.all.rp_filter=0 net.ipv4.conf.default.rp_filter=0")
+	err = cmd.Run()
+	if err != nil {
+		fmt.Println("Failed to disable reverse path filtering", err)
+	} else {
+		fmt.Println("Disabled reverse path filtering")
+	}
+
+	// - sudo setcap cap_net_admin+eip /home/ubuntu/go/src/github.com/scionproto/scion/bin/sig
 	// - sudo sysctl -w net.ipv4.ip_forward=1
 	// - sudo sysctl -w net.ipv4.conf.all.rp_filter=0 net.ipv4.conf.default.rp_filter=0
 }
