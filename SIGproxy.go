@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -19,19 +20,28 @@ import (
 )
 
 var (
-	sigListener      net.Listener
-	config           Config
-	measuringMap     map[string]Info
-	validSIGInfo     *regexp.Regexp
-	extractIP        *regexp.Regexp
-	runningSIG       *exec.Cmd
-	sigInfo          = "17-ffaa:1:1d,[127.0.0.1]:10080@10.0.2.0/24,192.168.178.0/24,10.0.8.0/24" // Info of this SIG
-	count            = 1
-	username         = ""
-	port             = 30303   // Port number of the application (listening port)
-	sigDiscoveryPort = "10001" // Specify own SIG discovery port
-	thisIP           = ""
-	application      string
+	sigListener  net.Listener
+	config       Config
+	measuringMap map[string]Info
+	validSIGInfo *regexp.Regexp
+	extractIP    *regexp.Regexp
+	runningSIG   *exec.Cmd
+	count        = 1
+	username     = ""
+	thisIP       = ""
+
+	//////////////////////////////////////////////
+	// THINGS BELOW ARE ADJUSTABLE BY THE USER //
+	////////////////////////////////////////////
+
+	// Specify the SIG details, e.g. "17-ffaa:1:1d,[127.0.0.1]:10080@10.0.2.0/24,192.168.178.0/24,10.0.8.0/24"
+	sigInfo = ""
+	// Specify oort number of the application (listening port)
+	port = 30303
+	// Specify own SIG discovery port
+	sigDiscoveryPort = "10001"
+	// Specify the command for the running application e.g. "./geth -datadir="<>" -bootnodes=enode//... -port 30303 -networkID 8014 console"
+	application = ""
 )
 
 // Info stores data for measurements
@@ -174,6 +184,9 @@ func handleRequest(conn net.Conn) {
 
 func startApplication() {
 	cmd := exec.Command("sudo", "-s", "-u", username, application)
+	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		fmt.Println("Failed to start process", err)
 	} else {
@@ -412,14 +425,13 @@ func initLinuxCmds() {
 
 func init() {
 	config = Config{}
-	config.ConfigVersion = 9001
+	config.ConfigVersion = 9001 // TODO change by the user
 	config.ASes = make(map[string]AS)
 
 	measuringMap = make(map[string]Info)
 
 	validSIGInfo = regexp.MustCompile(`^\d+-[\d:A-Fa-f]+,\[(\d+.){3}\d+\]:\d+@((\d+.){3}\d+\/\d+,?)*$`)
 	extractIP = regexp.MustCompile(`(SRC|DST)=(\d+.){3}\d+`)
-	application = "./clientTCP"
 }
 
 func main() {
@@ -443,16 +455,7 @@ func main() {
 	go runSIGDiscoveryServer()
 	go startApplication()
 
-	// TODO
 	fmt.Println("Measuring...")
-
-	// Test
-	// info := Info{}
-	// info.ping = math.MaxFloat64
-	// info.ttl = 0
-	// info.count = 0
-	// info.time = time.Now()
-	// measuringMap["128.105.21.208"] = info
 
 	for {
 		for k, v := range measuringMap {
